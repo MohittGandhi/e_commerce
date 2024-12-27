@@ -1,50 +1,3 @@
-/*
-import 'package:flutter/material.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-class QRScannerScreen extends StatefulWidget {
-  @override
-  _QRScannerScreenState createState() => _QRScannerScreenState();
-}
-
-class _QRScannerScreenState extends State<QRScannerScreen> {
-  final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
-  Barcode? result;
-
-  void _onQRViewCreated(QRViewController controller) {
-    controller.scannedDataStream.listen((scanData) async {
-      setState(() {
-        result = scanData;
-      });
-
-      if (result != null) {
-        final productSnapshot = await FirebaseFirestore.instance
-            .collection('products')
-            .where('qrCodeId', isEqualTo: result!.code)
-            .get();
-        if (productSnapshot.docs.isNotEmpty) {
-          final product = productSnapshot.docs.first.data();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Added ${product['name']} to cart')),
-          );
-        }
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('QR Scanner')),
-      body: QRView(
-        key: qrKey,
-        onQRViewCreated: _onQRViewCreated,
-      ),
-    );
-  }
-}
-*/
 import 'package:flutter/material.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -84,8 +37,26 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
           if (productSnapshot.docs.isNotEmpty) {
             final product = productSnapshot.docs.first.data();
+
+            // Add the product to the 'cart' collection
+            await FirebaseFirestore.instance.collection('cart').add({
+              'name': product['name'],
+              'description': product['description'],
+              'price': product['price'],
+              'qrCodeId': product['qrCodeId'],
+            });
+
+            // Show a snack bar confirming the product has been added
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Added ${product['name']} to cart')),
+            );
+
+            // Navigate to CartPage to show the product details
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => CartPage(productId: productSnapshot.docs.first.id),
+              ),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -131,3 +102,45 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     );
   }
 }
+
+class CartPage extends StatelessWidget {
+  final String productId;
+
+  CartPage({required this.productId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Cart')),
+      body: FutureBuilder<DocumentSnapshot>(
+        future: FirebaseFirestore.instance.collection('products').doc(productId).get(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData) {
+            return const Center(child: Text('Product not found'));
+          }
+
+          final product = snapshot.data!.data() as Map<String, dynamic>;
+
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Name: ${product['name']}', style: Theme.of(context).textTheme.headlineSmall),
+                SizedBox(height: 8),
+                Text('Description: ${product['description']}'),
+                SizedBox(height: 8),
+                Text('Price: \$${product['price']}'),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
